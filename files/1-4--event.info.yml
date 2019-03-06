@@ -1,0 +1,6 @@
+name: Event
+type: module
+core: 8.x
+dependencies:
+  - drupal:user
+
