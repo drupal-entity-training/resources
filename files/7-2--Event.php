@@ -9,6 +9,7 @@ use Drupal\Core\Entity\EntityChangedTrait;
 use Drupal\Core\Entity\EntityPublishedInterface;
 use Drupal\Core\Entity\EntityPublishedTrait;
 use Drupal\Core\Entity\EntityTypeInterface;
+use Drupal\Core\Entity\RevisionLogEntityTrait;
 use Drupal\Core\Field\BaseFieldDefinition;
 use Drupal\Core\Field\FieldStorageDefinitionInterface;
 use Drupal\user\EntityOwnerInterface;
@@ -23,12 +24,19 @@ use Drupal\user\UserInterface;
  *   label_singular = @Translation("event"),
  *   label_plural = @Translation("events"),
  *   base_table = "event",
+ *   revision_table = "event_revision",
  *   entity_keys = {
  *     "id" = "id",
  *     "uuid" = "uuid",
+ *     "revision" = "revision",
  *     "label" = "title",
  *     "owner" = "author",
  *     "published" = "published",
+ *   },
+ *   revision_metadata_keys = {
+ *     "revision_user" = "revision_author",
+ *     "revision_created" = "revision_created",
+ *     "revision_log_message" = "revision_log_message",
  *   },
  *   handlers = {
  *     "access" = "Drupal\entity\EntityAccessControlHandler",
@@ -43,7 +51,8 @@ use Drupal\user\UserInterface;
  *     },
  *     "permission_provider" = "Drupal\entity\EntityPermissionProvider",
  *     "route_provider" = {
- *       "default" = "Drupal\entity\Routing\DefaultHtmlRouteProvider",
+ *       "default" = "Drupal\Core\Entity\Routing\DefaultHtmlRouteProvider",
+ *       "revision" = "Drupal\entity\Routing\RevisionRouteProvider",
  *     },
  *     "views_data" = "Drupal\views\EntityViewsData",
  *   },
@@ -53,13 +62,17 @@ use Drupal\user\UserInterface;
  *     "add-form" = "/admin/content/events/add",
  *     "edit-form" = "/admin/content/events/manage/{event}",
  *     "delete-form" = "/admin/content/events/manage/{event}/delete",
+ *     "version-history" = "/event/{event}/revisions",
+ *     "revision" = "/event/{event}/revisions/{event_revision}",
+ *     "revision-revert-form" = "/event/{event}/revisions/{event_revision}/revert",
  *   },
- *   admin_permission = "administer event"
+ *   admin_permission = "administer event",
+ *   show_revision_ui = true,
  * )
  */
 class Event extends ContentEntityBase implements EntityChangedInterface, EntityOwnerInterface, EntityPublishedInterface {
 
-  use EntityChangedTrait, EntityOwnerTrait, EntityPublishedTrait;
+  use EntityChangedTrait, EntityOwnerTrait, EntityPublishedTrait, RevisionLogEntityTrait;
 
   public static function baseFieldDefinitions(EntityTypeInterface $entity_type) {
     // Get the field definitions for 'id' and 'uuid' from the parent.
@@ -68,11 +81,13 @@ class Event extends ContentEntityBase implements EntityChangedInterface, EntityO
     $fields['title'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Title'))
       ->setRequired(TRUE)
+      ->setRevisionable(TRUE)
       ->setDisplayOptions('form', ['weight' => 0]);
 
     $fields['date'] = BaseFieldDefinition::create('datetime')
       ->setLabel(t('Date'))
       ->setRequired(TRUE)
+      ->setRevisionable(TRUE)
       ->setDisplayOptions('view', [
         'label' => 'inline',
         'settings' => [
@@ -84,6 +99,7 @@ class Event extends ContentEntityBase implements EntityChangedInterface, EntityO
 
     $fields['description'] = BaseFieldDefinition::create('text_long')
       ->setLabel(t('Description'))
+      ->setRevisionable(TRUE)
       ->setDisplayOptions('view', [
         'label' => 'hidden',
         'weight' => 10,
@@ -106,20 +122,21 @@ class Event extends ContentEntityBase implements EntityChangedInterface, EntityO
       ->setSetting('min', 1)
       ->setRequired(TRUE)
       ->setDefaultValue(10)
+      ->setRevisionable(TRUE)
       ->setDisplayOptions('form', ['weight' => 23]);
 
     $fields['attendees'] = BaseFieldDefinition::create('entity_reference')
       ->setLabel(t('Attendees'))
       ->setSetting('target_type', 'user')
       ->setCardinality(FieldStorageDefinitionInterface::CARDINALITY_UNLIMITED)
-      ->addConstraint('AttendeeCount')
-      ->addConstraint('UniqueAttendees')
+      ->setRevisionable(TRUE)
       ->setDisplayOptions('view', ['weight' => 20])
       ->setDisplayOptions('form', ['weight' => 27]);
 
     $fields['remaining'] = BaseFieldDefinition::create('integer')
       ->setLabel(t('Remaining number of attendees'))
       ->setComputed(TRUE)
+      ->setInternal(FALSE)
       ->setDisplayOptions('view', [
         'label' => 'inline',
         'weight' => 30,
@@ -131,7 +148,10 @@ class Event extends ContentEntityBase implements EntityChangedInterface, EntityO
       ->setDisplayOptions('form', ['weight' => 5]);
 
     $fields['changed'] = BaseFieldDefinition::create('changed')
-      ->setLabel(t('Changed'));
+      ->setLabel(t('Changed'))
+      ->setRevisionable(TRUE);
+
+    $fields += static::revisionLogBaseFieldDefinitions($entity_type);
 
     return $fields;
   }
@@ -246,6 +266,8 @@ class Event extends ContentEntityBase implements EntityChangedInterface, EntityO
   public function getRemaining() {
     return $this->get('remaining')->value;
   }
+
+
 
 }
 

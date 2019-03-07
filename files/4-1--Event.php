@@ -39,7 +39,7 @@ use Drupal\user\EntityOwnerTrait;
  *     },
  *     "permission_provider" = "Drupal\entity\EntityPermissionProvider",
  *     "route_provider" = {
- *       "html" = "Drupal\Core\Entity\Routing\DefaultHtmlRouteProvider",
+ *       "default" = "Drupal\entity\Routing\DefaultHtmlRouteProvider",
  *     },
  *     "views_data" = "Drupal\views\EntityViewsData",
  *   },
